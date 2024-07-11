@@ -1,4 +1,4 @@
-use std::{collections::linked_list, env, sync::Arc};
+use std::{env, sync::Arc};
 
 use dotenv::dotenv;
 use mongodb::{bson::doc, Client, Collection};
@@ -38,7 +38,7 @@ struct Credentials<'r> {
 
 struct Data {
     url_collection: Collection<UrlMapping>,
-    user_collection: Collection<UserMapping>
+    user_collection: Collection<UserMapping>,
 }
 
 #[get("/")]
@@ -87,6 +87,23 @@ async fn shorten_link(
         original_url: link.to_string(),
     };
 
+    let filter = doc! { "original_url": link };
+    let exists_result = data.url_collection.find_one(filter).await;
+
+    match exists_result {
+        Ok(result) => match result {
+            Some(result) => return Ok(result.short_code),
+            None => {}
+        },
+        Err(e) => {
+            println!("{}", e);
+            return Err(status::Custom(
+                Status::InternalServerError,
+                "Database error.",
+            ));
+        }
+    };
+
     let result = data.url_collection.insert_one(new_mapping.clone()).await;
 
     match result {
@@ -107,7 +124,6 @@ async fn delete_link(
     data: &State<Arc<Data>>,
     credentials: Json<Credentials<'_>>,
 ) -> status::Custom<&'static str> {
-
     let filter = doc! { "username": credentials.0.username, "password": credentials.0.password };
     let result = data.user_collection.find_one(filter).await;
 
@@ -120,20 +136,26 @@ async fn delete_link(
                 match result {
                     Ok(result) => {
                         if result.deleted_count == 0 {
-                            status::Custom(Status::InternalServerError, "Unable to find or delete the shortcode.")
+                            status::Custom(
+                                Status::InternalServerError,
+                                "Unable to find or delete the shortcode.",
+                            )
                         } else {
                             status::Custom(Status::Ok, "Short code deleted.")
                         }
-                    },
+                    }
                     Err(_) => status::Custom(
                         Status::InternalServerError,
                         "Unable to find or delete the shortcode.",
                     ),
                 }
-            },
+            }
             None => status::Custom(Status::BadRequest, "Wrong username and, or password."),
         },
-        Err(_) => status::Custom(Status::InternalServerError, "Error while checking credentials.")
+        Err(_) => status::Custom(
+            Status::InternalServerError,
+            "Error while checking credentials.",
+        ),
     }
 }
 
@@ -172,11 +194,17 @@ async fn rocket() -> _ {
         .await
         .expect("Failed to initialize mongodb client.");
     let database = client.database(&env::var("MONGODB_DB").expect("MONGODB_DB not found in .env"));
-    let url_collection: Collection<UrlMapping> = database
-        .collection(&env::var("MONGODB_URL_COLLECTION").expect("MONGODB_URL_COLLECTION not found in .env"));
-    let user_collection: Collection<UserMapping> = database.collection(&env::var("MONGODB_USER_COLLECTION").expect("MONGODB_USER_COLLECTION not found in .env"));
+    let url_collection: Collection<UrlMapping> = database.collection(
+        &env::var("MONGODB_URL_COLLECTION").expect("MONGODB_URL_COLLECTION not found in .env"),
+    );
+    let user_collection: Collection<UserMapping> = database.collection(
+        &env::var("MONGODB_USER_COLLECTION").expect("MONGODB_USER_COLLECTION not found in .env"),
+    );
 
     rocket::build()
-        .manage(Arc::new(Data { url_collection, user_collection }))
+        .manage(Arc::new(Data {
+            url_collection,
+            user_collection,
+        }))
         .mount("/", routes![index, shorten_link, get_link, delete_link])
 }
