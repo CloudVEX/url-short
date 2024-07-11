@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::{collections::linked_list, env, sync::Arc};
 
 use dotenv::dotenv;
 use mongodb::{bson::doc, Client, Collection};
@@ -76,6 +76,10 @@ async fn shorten_link(
         Some(link) => link,
         None => link,
     };
+
+    if link == "" {
+        return Err(status::Custom(Status::BadRequest, "Please provide a URL."));
+    }
 
     let short_code = generate_short_code();
     let new_mapping = UrlMapping {
