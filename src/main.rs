@@ -47,8 +47,8 @@ fn index() -> &'static str {
 }
 
 // 62⁶ = 56,800,235,584 possible codes
-fn generate_short_code() -> String {
-    (0..6)
+async fn generate_short_code(data: &Arc<Data>) -> Result<String, status::Custom<&'static str>> {
+    let code: String = (0..6)
         .map(|_| {
             let idx = rand::thread_rng().gen_range(0..62); // 26 letters + 26 capitals + 10 numbers = 62
             match idx {
@@ -58,7 +58,24 @@ fn generate_short_code() -> String {
                 _ => unreachable!(),
             }
         })
-        .collect()
+        .collect();
+
+    let exists_filter = doc! { "short_code": &code };
+    let exists_result = data.url_collection.find_one(exists_filter).await;
+
+    match exists_result {
+        Ok(result) => match result {
+            Some(_) => {
+                // Code already exists, generate a new one
+                Box::pin(generate_short_code(data)).await
+            }
+            None => Ok(code), // Code is unique, return it
+        },
+        Err(_) => Err(status::Custom(
+            Status::InternalServerError,
+            "Database error.",
+        )),
+    }
 }
 
 #[post("/shorten", data = "<url>")]
@@ -81,9 +98,10 @@ async fn shorten_link(
         return Err(status::Custom(Status::BadRequest, "Please provide a URL."));
     }
 
-    let short_code = generate_short_code();
+    let short_code = Box::pin(generate_short_code(&data)).await;
+
     let new_mapping = UrlMapping {
-        short_code: short_code.clone(),
+        short_code: short_code.clone()?,
         original_url: link.to_string(),
     };
 
