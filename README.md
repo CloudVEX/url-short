@@ -1,5 +1,5 @@
 # url-short
-[![License](https://img.shields.io/badge/license-Apache-orange.svg)](https://github.com/CloudVEX/url-short/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-orange.svg)](https://github.com/CloudVEX/url-short/blob/main/LICENSE)
 [![Created](https://img.shields.io/github/created-at/CloudVEX/url-short?color=orange
 )](https://github.com/CloudVEX/url-short)
 [![Activity](https://img.shields.io/github/commit-activity/m/CloudVEX/url-short?color=orange
