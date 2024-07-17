@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::{env, process, sync::Arc};
 
 use dotenv::dotenv;
 use mongodb::{bson::doc, Client, Collection};
@@ -98,10 +98,16 @@ async fn shorten_link(
         return Err(status::Custom(Status::BadRequest, "Please provide a URL."));
     }
 
-    let short_code = Box::pin(generate_short_code(&data)).await;
+    let short_code = match Box::pin(generate_short_code(&data)).await {
+        Ok(value) => value,
+        Err(_) => {
+            println!("Unable to generate a short code.");
+            process::exit(1);
+        }
+    };
 
     let new_mapping = UrlMapping {
-        short_code: short_code.clone()?,
+        short_code: short_code.clone(),
         original_url: link.to_string(),
     };
 
@@ -207,17 +213,24 @@ async fn get_link(
 async fn rocket() -> _ {
     dotenv().ok();
 
-    let client_uri = env::var("MONGODB_URI").expect("MONGODB_URI not found in .env");
-    let client = Client::with_uri_str(client_uri)
-        .await
-        .expect("Failed to initialize mongodb client.");
-    let database = client.database(&env::var("MONGODB_DB").expect("MONGODB_DB not found in .env"));
-    let url_collection: Collection<UrlMapping> = database.collection(
-        &env::var("MONGODB_URL_COLLECTION").expect("MONGODB_URL_COLLECTION not found in .env"),
-    );
-    let user_collection: Collection<UserMapping> = database.collection(
-        &env::var("MONGODB_USER_COLLECTION").expect("MONGODB_USER_COLLECTION not found in .env"),
-    );
+    let client_uri = get_env("MONGODB_URI", "MONGODB_URI not found in .env");
+    let client = match Client::with_uri_str(client_uri).await {
+        Ok(client) => client,
+        Err(e) => {
+            println!("Unable to connect to the database.\n");
+            println!("Error: {}", e);
+            process::exit(1);
+        }
+    };
+    let database = client.database(&get_env("MONGODB_DB", "MONGODB_DB not found in .env"));
+    let url_collection: Collection<UrlMapping> = database.collection(&get_env(
+        "MONGODB_URL_COLLECTION",
+        "MONGODB_URL_COLLECTION not found in .env",
+    ));
+    let user_collection: Collection<UserMapping> = database.collection(&get_env(
+        "MONGODB_USER_COLLECTION",
+        "MONGODB_USER_COLLECTION not found in .env",
+    ));
 
     rocket::build()
         .manage(Arc::new(Data {
@@ -225,4 +238,14 @@ async fn rocket() -> _ {
             user_collection,
         }))
         .mount("/", routes![index, shorten_link, get_link, delete_link])
+}
+
+fn get_env(path: &str, error_message: &str) -> String {
+    return match env::var(path) {
+        Ok(value) => value,
+        Err(_) => {
+            println!("{}", error_message);
+            process::exit(1);
+        }
+    };
 }
