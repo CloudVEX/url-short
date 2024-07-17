@@ -102,7 +102,10 @@ async fn shorten_link(
         Ok(value) => value,
         Err(_) => {
             println!("Unable to generate a short code.");
-            process::exit(1);
+            return Err(status::Custom(
+                Status::InternalServerError,
+                "Unable to generate a short code.",
+            ));
         }
     };
 
