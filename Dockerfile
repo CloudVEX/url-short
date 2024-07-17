@@ -1,15 +1,20 @@
-# Use a lightweight base image
-FROM alpine:latest
+# This cleanly clones and compiles the project before its ran.
+FROM rust:latest
 
-# Set the working directory
 WORKDIR /app
 
-# Copy the server executable or script to the container
-COPY ./server /app/server
-COPY ./Rocket.toml /app/Rocket.toml
+RUN apt-get update && \
+    apt-get install -y git && \
+    apt-get clean
 
-# Expose port 7890
+RUN git clone https://github.com/CloudVEX/url-short.git
+
+WORKDIR /app/url-short
+
+COPY .env .env
+
+RUN cargo build --release
+
 EXPOSE 7890
 
-# Command to run the server
-CMD ["/app/server"]
+CMD ["./target/release/url-short"]
