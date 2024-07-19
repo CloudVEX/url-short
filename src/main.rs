@@ -1,9 +1,10 @@
-use std::{env, process, sync::Arc};
+use std::{env, path::Path, process, sync::Arc};
 
 use dotenv::dotenv;
 use mongodb::{bson::doc, Client, Collection};
 use rand::Rng;
 use rocket::{
+    fs::NamedFile,
     http::Status,
     response::{status, Redirect},
     serde::{json::Json, Deserialize},
@@ -44,6 +45,15 @@ struct Data {
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world! :D"
+}
+
+#[get("/robots.txt")]
+async fn robots() -> Result<NamedFile, Status> {
+    let path = Path::new("static/robots.txt");
+    return match NamedFile::open(path).await {
+        Ok(file) => Ok(file),
+        Err(_) => Err(Status::NotFound),
+    };
 }
 
 // 62⁶ = 56,800,235,584 possible codes
@@ -240,7 +250,10 @@ async fn rocket() -> _ {
             url_collection,
             user_collection,
         }))
-        .mount("/", routes![index, shorten_link, get_link, delete_link])
+        .mount(
+            "/",
+            routes![index, shorten_link, get_link, delete_link, robots],
+        )
 }
 
 fn get_env(path: &str, error_message: &str) -> String {
